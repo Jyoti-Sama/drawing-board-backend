@@ -1,5 +1,7 @@
 const express = require('express');
+const path = require("path")
 const cors = require('cors');
+const fs = require('fs/promises')
 const mongoose = require('mongoose')
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -17,7 +19,17 @@ mongoose.connect(MONGODB_URI, () => console.log("db connected..."))
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-app.use(cors())
+
+app.use(cors());
+app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", '*');
+    res.header("Access-Control-Allow-Credentials", true);
+    res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
+    next();
+});
+
+app.use(express.static(path.join(__dirname, 'public')))
 
 const serverUP = Date();
 
@@ -115,7 +127,7 @@ io.on('connection', (socket) => {
         room1Details.push(data)
 
         socket.join("room1");
-        socket.to("room1").to("room2").emit("joinroom", {data, room1Details})
+        socket.to("room1").to("room2").emit("joinroom", { data, room1Details })
     });
 
     socket.on("join-room2", (data) => {
@@ -127,8 +139,8 @@ io.on('connection', (socket) => {
         room1Details = room1Details.filter(user => user.id !== socket.id)
         console.log("disconnected", room1Details)
 
-        socket.to("room1").emit("user-left", {leftuser, room1Details})
-        socket.to("room2").emit("user-left", {leftuser, room1Details})
+        socket.to("room1").emit("user-left", { leftuser, room1Details })
+        socket.to("room2").emit("user-left", { leftuser, room1Details })
     });
 
     socket.on("drawing-data-to-server", (data) => {
@@ -137,7 +149,43 @@ io.on('connection', (socket) => {
         socket.to("room1").emit("drawing-data-to-client", data)
         socket.to("room2").emit("drawing-data-to-client", data.name)
     })
+
+    socket.on("set-subtitle", (data) => {
+        console.log(data);
+        socket.emit("new data")
+    })
 });
+
+app.get('/subtitle', (req, res) => {
+    let temp = path.join(__dirname, 'public/subtitle.en.vtt')
+    res.sendFile(temp)
+})
+
+app.post('/create-subtitle', async (req, res) => {
+    let temp = path.join(__dirname, 'public/subtitle.en.vtt');
+
+    console.log(req.body)
+
+    try {
+        await fs.writeFile("./public/subtitle.en.vtt", "WEBVTT\n\n")
+        let keys = Object.keys(req.body);
+
+        for (let i = 0; i < keys.length; i++) {
+            await fs.appendFile("./public/subtitle.en.vtt", keys[i] + "\n")
+            await fs.appendFile("./public/subtitle.en.vtt", req.body[keys[i]] + "\n\n")
+        }
+
+        // for (const iterator of req.body) {
+        //     await fs.writeFile("./public/demo.txt", iterator+"\n")
+        //     await fs.writeFile("./public/demo.txt", req.body[iterator]+"iterator\n\n")
+        // }
+        res.sendFile(temp)
+    } catch (error) {
+        console.log(error)
+    }
+
+    res.sendFile(temp)
+})
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log("running on port 5000"))
